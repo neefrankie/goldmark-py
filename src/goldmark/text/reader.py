@@ -39,9 +39,8 @@ class Reader:
         self._length = len(src)
 
         self._line_num: int = -1  # current line number
-        self._line_offset: int = -1 # in current line
-
         self._line_span: LineSpan | None = None
+
         self._next_line_start = 0 # next line start offset
         self._cursor = 0 # next char offset
 
@@ -61,6 +60,16 @@ class Reader:
         return Segment(
             start=self._cursor,
             stop=self._line_span.end,
+        )
+
+    def peek_rest_line(self, force_newline: bool = False) -> Segment | None:
+        if self._line_span is None:
+            return None
+
+        return Segment(
+            start=self._cursor,
+            stop=self._line_span.end,
+            force_newline=force_newline,
         )
 
     @property
@@ -224,6 +233,18 @@ class Reader:
 
         return i
 
+    def indent_cols(self, start: int, max_cols: int) -> int:
+        i = start
+        cols = 0
+        while i < self._length and cols < max_cols:
+            if self._src[i] in self._SPACE_TAB:
+                cols += 1
+                i += 1
+            else:
+                break
+
+        return i
+
     def is_space_char(self, pos: int) -> bool:
         if pos >= self._length:
             return False
@@ -289,9 +310,21 @@ class Reader:
             stop=seg.stop - right_space_len
         )
 
+    def ltrim_space_tab(self, seg: Segment, max_cols: int) -> Segment:
+        i = seg.start
+        limit = min(seg.start + max_cols, seg.stop)
+        while i < limit:
+            ch = self._src[i]
+            if ch not in self._SPACE_TAB:
+                break
+
+            i += 1
+
+        return seg.with_start(i)
+
     # === Blankline ===
 
-    def is_ahead_blank(self, start: int, end: int) -> bool:
+    def is_blank_span(self, start: int, end: int) -> bool:
         while start < end:
             c = self._src[start]
             if c in self._SPACE_TAB:
@@ -303,12 +336,12 @@ class Reader:
 
         return False # EOF without newline.
 
-    def is_blankline(self, line: LineSpan) -> bool:
-        return self.is_ahead_blank(line.start, line.end)
+    def is_blank(self, seg: Segment) -> bool:
+        return self.is_blank_span(seg.start, seg.stop)
 
     def skip_blank_lines(self):
         while self._line_span:
-            if self.is_blankline(self._line_span):
+            if self.is_blank_span(self._line_span.start, self._line_span.end):
                 self.advance_line()
             else:
                 break
