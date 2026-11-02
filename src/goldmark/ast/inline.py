@@ -3,7 +3,8 @@ from enum import Enum, Flag, auto
 from typing import List
 
 from goldmark.text import (
-    Segment
+    Segment,
+    Reader,
 )
 from .ast import (
     Node,
@@ -80,14 +81,14 @@ class Text(BaseInline):
 
     
 
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         m = {
-            'value': f'"{self.value(source)}\n"'
+            'value': f'"{reader.value(self.segment)}\n"'
         }
         fs = text_flags_string(self.flags)
         if fs:
             m['flags'] = fs
-        dump_node(self, source, level, m)
+        dump_node(self, reader, level, m)
 
     def is_soft_break(self) -> bool:
         return TextKind.SOFT_BREAK in self.flags
@@ -117,21 +118,20 @@ class Text(BaseInline):
         if not isinstance(other, Text):
             return False
 
-        if self.segment.stop != other.segment.start or self.segment.padding != 0 or source[self.segment.stop -1] == '\n' or self.is_raw != other.is_raw:
+        if self.segment.stop != other.segment.start or source[self.segment.stop -1] == '\n' or self.is_raw != other.is_raw:
             return False
 
         self.segment = Segment(
             start=self.segment.start,
             stop=other.segment.stop,
-            padding=self.segment.padding,
             force_newline=self.segment.force_newline,
         )
         self.set_soft_break(other.is_soft_break())
         self.set_hard_break(other.is_hard_break())
         return True
 
-    def value(self, source: str) -> str:
-        return source[self.segment.start:self.segment.stop]
+    def value(self, reader: Reader) -> str:
+        return reader.value(self.segment)
 
 def merge_or_append_text_segment(parent: Node, seg: Segment):
     last = parent.get_last_child()
@@ -170,7 +170,7 @@ class String(BaseInline):
     def get_pos(self) -> int:
         return -1
 
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         fs = text_flags_string(self.flags)
         if fs:
             fs = f'({fs})'
@@ -200,14 +200,14 @@ class CodeSpan(BaseInline):
     def kind(self) -> NodeKind:
         return NodeKind.CODE_SPAN
 
-    def dump(self, source: str, level: int):
-        dump_node(self, source, level)
+    def dump(self, reader: Reader, level: int):
+        dump_node(self, reader, level)
     
-    def is_blank(self, source: str):
+    def is_blank(self, reader: Reader):
         child = self.get_first_child()
         while child is not None:
             if isinstance(child, Text):
-                value = child.value(source)
+                value = reader.value(child.segment)
                 if len(value.strip()) != 0:
                     return False
             child = child.get_next_sibling()
@@ -222,8 +222,8 @@ class Emphasis(BaseInline):
     def kind(self) -> NodeKind:
         return NodeKind.EMPHASIS
 
-    def dump(self, source: str, level: int):
-        dump_node(self, source, level, {
+    def dump(self, reader: Reader, level: int):
+        dump_node(self, reader, level, {
             'level': f'{self.level}'
         })
 
@@ -251,7 +251,7 @@ class Link(BaseLink):
     def kind(self) -> NodeKind:
         return NodeKind.LINK
 
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         m = {
             'destination': self.destination
         }
@@ -259,7 +259,11 @@ class Link(BaseLink):
         if self.title:
             m['title'] = self.title
 
-        def cb(level: int):
+        dump_node(self, reader, level, m, self.dump_cb)
+        
+
+    def dump_cb(self, level: int):
+        if self.reference:
             indent = '    ' * level
             print(f'{indent}Reference ' + "{\n")
             indent2 = '    ' * (level + 1)
@@ -267,7 +271,6 @@ class Link(BaseLink):
             print(f'{indent2}Value: "{self.reference.value}"\n')
             print(f'{indent}' + '}\n')
 
-        dump_node(self, source, level, m, cb)
 
 @dataclass(slots=True)
 class Image(BaseLink):
@@ -307,18 +310,30 @@ class AutoLink(BaseInline):
     def kind(self) -> NodeKind:
         return NodeKind.AUTO_LINK
 
-    def url(self, source: str) -> str:
+    def dump(self, reader: Reader, level: int):
+        if self.value:
+            value = reader.value(self.value.segment)
+        else:
+            value = ''
+        m = {
+            'value': value,
+        }
+        dump_node(self, reader, level, m)
+
+    def url(self, reader: Reader) -> str:
         if self.protocol and self.value:
             seg = self.value.segment
 
-            url = source[seg.start:seg.stop]
+            url = reader.value(seg)
 
             return f'{self.protocol}://{url}'
 
         return ''
 
-    def label(self, source: str):
-        return source[self.value.segment.start:self.value.segment.stop]
+    def label(self, reader: Reader) -> str:
+        if self.value:
+            return reader.value(self.value.segment)
+        return ''
 
 @dataclass(slots=True)
 class RawHTML(BaseInline):
@@ -328,13 +343,13 @@ class RawHTML(BaseInline):
     def kind(self) -> NodeKind:
         return NodeKind.RAW_HTML
 
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         text = [
-            source[seg.start:seg.stop]
+            reader.value(seg)
             for seg in self.segments
         ]
         
         m = {
             'raw_text': ''.join(text)
         }
-        dump_node(self, source, level, m)
+        dump_node(self, reader, level, m)

@@ -2,7 +2,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 
 from goldmark.text import (
-    Segment
+    Segment,
+    Reader,
 )
 from .ast import (
     BaseBlock,
@@ -18,8 +19,8 @@ class TextBlock(BaseBlock):
     def kind(self) -> NodeKind:
         return NodeKind.TEXT_BLOCK
 
-    def dump(self, source: str, level: int):
-        dump_node(self, source, level)
+    def dump(self, reader: Reader, level: int):
+        dump_node(self, reader, level)
 
     def get_pos(self) -> int:
         if not self.lines:
@@ -35,8 +36,8 @@ class Paragraph(BaseBlock):
     def kind(self) -> NodeKind:
         return NodeKind.PARAGRAPH
 
-    def dump(self, source: str, level: int):
-        dump_node(self, source, level)
+    def dump(self, reader: Reader, level: int):
+        dump_node(self, reader, level)
 
     def get_pos(self) -> int:
         if not self.lines:
@@ -53,8 +54,8 @@ class Heading(BaseBlock):
     def kind(self) -> NodeKind:
         return NodeKind.HEADING
 
-    def dump(self, source: str, level: int):
-        dump_node(self, source, level, {
+    def dump(self, reader: Reader, level: int):
+        dump_node(self, reader, level, {
             'level': f'{self.level}'
         })
 
@@ -71,8 +72,8 @@ class ThematicBreak(BaseBlock):
     def kind(self) -> NodeKind:
         return NodeKind.THEMATIC_BREAK
     
-    def dump(self, source: str, level: int):
-        dump_node(self, source, level)
+    def dump(self, reader: Reader, level: int):
+        dump_node(self, reader, level)
 
     
 
@@ -83,8 +84,8 @@ class CodeBlock(BaseBlock):
     def kind(self) -> NodeKind:
         return NodeKind.CODE_BLOCK
     
-    def dump(self, source: str, level: int):
-        dump_node(self, source, level)
+    def dump(self, reader: Reader, level: int):
+        dump_node(self, reader, level)
 
     
     
@@ -97,11 +98,11 @@ class FencedCodeBlock(BaseBlock):
     def kind(self) -> NodeKind:
         return NodeKind.FENCED_CODE_BLOCK
 
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         m = {}
-        dump_node(self, source, level, m)
+        dump_node(self, reader, level, m)
 
-    def language(self, source: str) -> str:
+    def language(self, reader: Reader) -> str:
         return self.lang
 
     @property
@@ -116,8 +117,8 @@ class Blockquote(BaseBlock):
     def kind(self) -> NodeKind:
         return NodeKind.BLOCKQUOTE
 
-    def dump(self, source: str, level: int):
-        dump_node(self, source, level)
+    def dump(self, reader: Reader, level: int):
+        dump_node(self, reader, level)
 
     
 
@@ -131,13 +132,13 @@ class ListBlock(BaseBlock):
     def kind(self) -> NodeKind:
         return NodeKind.LIST
 
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         m = {
             'ordered': f'{self.is_ordered()}',
             'marker': self.marker,
             'tight': f'{self.is_tight}'
         }
-        dump_node(self, source, level, m)
+        dump_node(self, reader, level, m)
 
     def is_ordered(self) -> bool:
         return self.marker == '.' or self.marker == ')'
@@ -153,11 +154,11 @@ class ListItem(BaseBlock):
     def kind(self) -> NodeKind:
         return NodeKind.LIST_ITEM
 
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         m = {
             'offset': f'{self.offset}'
         }
-        dump_node(self, source, level, m)
+        dump_node(self, reader, level, m)
 
     @classmethod
     def new(cls, offset: int) -> 'ListItem':
@@ -193,24 +194,24 @@ class HTMLBlock(BaseBlock):
     def is_raw(self) -> bool:
         return True
 
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         indent = '    ' * level
         print(f'{indent}HTMLBlock ' + '{\n')
         indent2 = '    ' * (level + 1)
         print(f'{indent2}Pos: {self.get_pos()}')
         text = ''.join([
-            source[line.start:line.stop]
+            reader.value(line)
             for line in self.lines
         ])
         print(f'{indent2}RawText: "{text}"\n')
         child = self.get_first_child()
         while child:
-            child.dump(source, level+1)
+            child.dump(reader, level+1)
             child = child.get_next_sibling()
 
         if self.has_closure():
             cl = self.closure_line
-            print(f'{indent2}Closure: "{source[cl.start:cl.stop]}"')
+            print(f'{indent2}Closure: "{reader.value(cl)}"')
 
         print(f"{indent2}BlankPreviousLines: {self.has_blank_previous_lines()}\n")
         print(f'{indent}' + '}\n')
@@ -248,12 +249,12 @@ class LinkReferenceDefinition(BaseBlock):
 
         return self.lines[0].start
 
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         m = {
             'label': self.label,
             'destination': self.destination,
             'title': self.title
         }
-        dump_node(self, source, level, m)
+        dump_node(self, reader, level, m)
 
     
