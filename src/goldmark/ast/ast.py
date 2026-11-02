@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List
 
-from goldmark.text import Segment
+from goldmark.text import Segment, Reader
 
 class Comparator(ABC):
     @abstractmethod
@@ -177,7 +177,7 @@ class Node(ABC):
         pass
 
     @abstractmethod
-    def dump(self, source: str, level: int):
+    def dump(self, reader: Reader, level: int):
         pass
     
 
@@ -404,7 +404,7 @@ class BaseNode(Node, ABC):
 
 def dump_node(
     v: Node, 
-    source: str, 
+    reader: Reader, 
     level: int, 
     kv: Dict[str, str] | None = None, 
     cb: Callable[[int]] | None = None
@@ -416,7 +416,7 @@ def dump_node(
     print(f'{indent_2}Pos: {v.get_pos()}')
     if v.node_type == NodeType.BLOCK:
         text = ''.join([
-            source[line.start: line.stop]
+            reader.value(line)
             for line in v.get_lines()
         ])
         print(f'{indent_2}RawText: "{text}"\n')
@@ -431,7 +431,7 @@ def dump_node(
 
     c = v.get_first_child()
     while c is not None:
-        c.dump(source, level+1)
+        c.dump(reader, level+1)
 
     print(f'{indent}' + '}\n')
 
