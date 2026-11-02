@@ -1,10 +1,27 @@
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum, Flag, auto
 from typing import Dict
 
-from .reference import Reference
+from goldmark.text import Segment
+
 from .ids import IDs
-from .delimiter import Delimiter
+
+@dataclass(slots=True)
+class Reference:
+    label: str
+    destination: str
+    title: str
+
+@dataclass(slots=True)
+class Delimiter:
+    segment: Segment
+    can_open: bool
+    can_close: bool
+    length: int
+    original_length: int
+    char: str
+    previous_delimiter: 'Delimiter'
+    next_delimiter: 'Delimiter'
 
 @dataclass(slots=True)
 class ParseContext:
@@ -16,7 +33,7 @@ class ParseContext:
     last_delimiter: Delimiter
 
 
-class State(Enum):
+class State(Flag):
     NONE = auto()
     CONTINUE = auto()
     CLOSE = auto()
