@@ -34,5 +34,6 @@ from .inline import (
     Link,
     Image,
     AutoLink,
+    AutoLinkKind,
     RawHTML,
 )
