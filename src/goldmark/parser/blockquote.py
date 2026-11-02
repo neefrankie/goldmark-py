@@ -5,7 +5,6 @@ from goldmark.ast import (
 )
 from goldmark.text import (
     Reader,
-    Segment,
 )
 from goldmark.ast import (
     Blockquote,
@@ -18,17 +17,18 @@ from .context import (
 
 from .parser import (
     BlockParser,
+    OpenResult,
 )
 
 class BoockquoteParser(BlockParser):
     def trigger(self) -> str:
         return '>'
 
-    def open(self, parent: Node, reader: Reader, pc: ParseContext) -> Tuple[Node | None, State]:
+    def open(self, parent: Node, reader: Reader, pc: ParseContext) -> OpenResult | None:
         if self._process(reader):
-            return Blockquote(), State.HAS_CHILDREN
+            return OpenResult(Blockquote(), State.HAS_CHILDREN)
 
-        return None, State.NO_CHILDREN
+        return None
 
     def try_continue(self, node: Node, reader: Reader, pc: ParseContext) -> State:
         if self._process(reader):
