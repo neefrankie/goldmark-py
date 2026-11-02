@@ -15,8 +15,11 @@ from .context import (
     ParseContext,
     State,
 )
+from .parser import (
+    BlockParser,
+)
 
-class ATXHeadingParser:
+class ATXHeadingParser(BlockParser):
 
     def trigger(self) -> str:
         return '#'
