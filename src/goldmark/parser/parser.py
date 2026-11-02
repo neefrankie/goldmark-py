@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import NamedTuple, Tuple
 
 from goldmark.ast import (
     Node
@@ -13,13 +13,17 @@ from .context import (
     State,
 )
 
+class OpenResult(NamedTuple):
+    node: Node
+    state: State
+
 class BlockParser(ABC):
     @abstractmethod
     def trigger(self) -> str:
         pass
 
     @abstractmethod
-    def open(self, parent: Node, reader:  Reader, pc: ParseContext) -> Tuple[Node | None, State]:
+    def open(self, parent: Node, reader:  Reader, pc: ParseContext) -> OpenResult | None:
         pass
 
     @abstractmethod
