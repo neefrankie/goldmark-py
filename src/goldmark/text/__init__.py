@@ -5,5 +5,6 @@ from .line import (
     LineSpan
 )
 from .segment import (
-    Segment
+    Segment,
+    Segments
 )
