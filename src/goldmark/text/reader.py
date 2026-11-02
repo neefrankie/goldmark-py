@@ -1,15 +1,11 @@
 import re
-from typing import List, NamedTuple
+import string
+from typing import Final, List, NamedTuple
 
-from goldmark.util import calc_tab_width
+from goldmark.util import is_alnum, is_url_body
 
 from .line import LineSpan
 from .segment import Segment
-
-class Pos(NamedTuple):
-    line_num: int
-    cursor: int
-    line_span: LineSpan
 
 class MatchResult(NamedTuple):
     start: int
@@ -25,6 +21,10 @@ class FindClosureOptions(NamedTuple):
 class Reader:
     _WHITESPACE = ' \t\r\n'
     _SPACE_TAB = ' \t'
+
+    _EMAIL_CHARS: Final = frozenset(string.ascii_letters + string.digits + "!#$%&'*+-./=?^_`{|}~") # string.punctuation exludes (),:;<>@[\], add `.
+    _SCHEME_REST: Final = frozenset(string.ascii_letters + string.digits + '.+-')
+    
 
     def __init__(self, src: str):
         src = src.replace('\r\n', '\n')
@@ -64,15 +64,11 @@ class Reader:
         )
 
     @property
-    def position(self) -> Pos | None:
+    def col_offset(self) -> int:
         if self._line_span is None:
-            return None
-        
-        return Pos(
-            line_num=self._line_num,
-            cursor=self._cursor,
-            line_span=self._line_span,
-        )
+            return -1
+
+        return self._cursor - self._line_span.start
 
     @property
     def is_eof(self) -> bool:
@@ -118,18 +114,48 @@ class Reader:
 
         return self._line_span
 
-    def advance(self, n: int):
-        self._line_offset = -1
+    # def advance(self, n: int):
+    #     self._line_offset = -1
 
-        if n <= 0: # Ensure monotonic increase.
+    #     if n <= 0: # Ensure monotonic increase.
+    #         return
+
+    #     new_pos = self._cursor + n
+
+    #     while new_pos >= self._next_line_start:
+    #         self.advance_line()
+
+    #     self._cursor = new_pos
+
+    def advance_to_pos(self, pos: int):
+        """
+        Move cursor forward to the specified position.
+        
+        Parameter:
+            pos: aboslute index in the whole document.
+
+        NOTE
+        This differs from the original implementation.
+        The original implementation move n steps forward
+        because most of the time it performed operation
+        on a slice of string.
+        Here we performa all operation on the original string,
+        so using asobulute position is more convenient.
+        """
+        if pos >= self._length:
+            raise Exception('Cursor.advance_pos: newpos is out of range')
+
+        if pos < self._cursor:
+            # Ensure monotony
+            raise Exception('Cursor.advance_pos: newpos is less than current pos')
+
+        if pos == self._cursor:
             return
 
-        new_pos = self._cursor + n
-
-        while new_pos >= self._next_line_start:
+        while pos >= self._next_line_start:
             self.advance_line()
 
-        self._cursor = new_pos
+        self._cursor = pos
 
     def advance_to_eol(self):
         if self._line_span is None:
@@ -188,11 +214,27 @@ class Reader:
 
     # === Whitespace ===
 
+    def indent(self, start: int) -> int:
+        i = start
+        while i < self._length:
+            if self._src[i] in self._SPACE_TAB:
+                i += 1
+            else:
+                break
+
+        return i
+
     def is_space_char(self, pos: int) -> bool:
         if pos >= self._length:
             return False
 
         return self._src[pos] == ' '
+
+    def is_space_tab(self, pos: int) -> bool:
+        if pos >= self._length:
+            return False
+
+        return self._src[pos] in self._SPACE_TAB
 
     def is_whitespace(self, pos: int) -> bool:
         if pos >= self._length:
@@ -271,6 +313,9 @@ class Reader:
             else:
                 break
 
+    def is_right_angle(self, pos: int) -> bool:
+        return self._src[pos] == '>'
+
     def match(self, pattern: re.Pattern[str]) -> MatchResult | None:
         if self._line_span is None:
             return None
@@ -284,10 +329,119 @@ class Reader:
                 captures=list(m.groups()),
             )
 
-    
-    
+    def find_email_index(self, start: int, stop: int) -> int:
 
-    # === Predicate ===
+        i = start
+        while i < stop:
+            ch = self._src[i]
+            if ch not in self._EMAIL_CHARS:
+                break
+            i += 1
+
+        if i == start:
+            return -1
+
+        if i >= stop or self._src[i] != '@':
+            return -1
+
+        i += 1 # eat @
+
+        domain_start = i
+
+        i = self._is_domain_label(i, stop)
+        if i == -1:
+            return -1
+
+        # repeat '.<label>' pattern
+        while i < stop and self._src[i] == '.':
+            i += 1
+            i = self._is_domain_label(i, stop)
+            if i == -1:
+                return -1
+
+        if i == domain_start or (i > domain_start and self._src[i] == '.'):
+            return -1
+
+        return i
+
+    def _is_domain_label(self, start: int, stop: int):
+        """
+        [a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?
+        """
+        if start >= stop:
+            return -1
+
+        first = self._src[start]
+        if not is_alnum(first):
+            return -1
+
+        i = start+1
+        length = 1
+
+        while i < stop:
+            ch = self._src[i]
+
+            if is_alnum(ch):
+                i += 1
+                length += 1
+                
+                if length > 63:
+                    return -1
+                
+                continue
+
+            if ch == '-':
+                i += 1
+                length += 1
+
+                if length > 63:
+                    return -1
+
+                continue
+
+            break
+
+        if self._src[i-1] == '-':
+            return -1
+
+        return i
+
+    def find_url_index(self, start: int, stop: int) -> int:
+        # [A-Za-z][A-Za-z0-9.+-]{1,31}:[^<>\x00-\x20]*
+        i = start
+
+        # [A-Za-z]
+        if not (stop > start and self._src[start] in string.ascii_letters):
+            return -1
+
+        i += 1
+
+        # [A-Za-z0-9.+-]{1,31}
+        while i < stop:
+            ch = self._src[i]
+
+            if ch not in self._SCHEME_REST:
+                break
+
+            i += 1
+
+        if i == start + 1 or i > start + 33 or i >= stop:
+            return - 1
+
+        if self._src[i] != ':':
+            return -1
+
+        i += 1
+
+        while i < stop:
+            ch = self._src[i]
+            if not is_url_body(ord(ch)):
+                break
+            i += 1
+
+        return i
+
+
 
 
 
