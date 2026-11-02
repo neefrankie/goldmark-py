@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, List, NamedTuple
 
 class Segment(NamedTuple):
@@ -38,7 +38,7 @@ class Segment(NamedTuple):
     
 @dataclass(slots=True)
 class Segments:
-    values: List[Segment]
+    values: List[Segment] = field(default_factory=list)
 
     def append(self, seg: Segment):
         self.values.append(seg)
@@ -54,6 +54,12 @@ class Segments:
 
     def __setitem__(self, key: int, value: Segment):
         self.values[key] = value
+
+    def set_sliced(self, lo: int, hi: int): 
+        self.values = self.values[lo:hi]
+
+    def get_sliced(self, lo: int, hi: int) -> List[Segment]:
+        return self.values[lo:hi]
             
 
     def clear(self):
