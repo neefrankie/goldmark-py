@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List
 
-from goldmark.text import Segment, Reader
+from goldmark.text import Segment, Reader, Segments
 
 class Comparator(ABC):
     @abstractmethod
@@ -162,11 +162,11 @@ class Node(ABC):
         pass
 
     @abstractmethod
-    def get_lines(self) -> List[Segment]:
+    def get_lines(self) -> Segments:
         pass
 
     @abstractmethod
-    def set_lines(self, v: List[Segment]):
+    def set_lines(self, v: Segments):
         pass
 
     # === Concreate node
@@ -477,7 +477,7 @@ def visit(node: Node):
 
 @dataclass(slots=True)
 class BaseBlock(BaseNode, ABC):
-    lines: List[Segment] = field(default_factory=list)
+    lines: Segments = field(default_factory=Segments)
     blank_previous_lines: bool = False
 
     @property
@@ -494,10 +494,10 @@ class BaseBlock(BaseNode, ABC):
     def set_blank_previous_lines(self, v: bool):
         self.blank_previous_lines = v
 
-    def get_lines(self) -> List[Segment]:
+    def get_lines(self) -> Segments:
         return self.lines
 
-    def set_lines(self, v: List[Segment]):
+    def set_lines(self, v: Segments):
         self.lines = v
 
 @dataclass(slots=True)
