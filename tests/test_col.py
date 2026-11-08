@@ -6,7 +6,7 @@ from typing import List, NamedTuple
 class Line(NamedTuple):
     start: int
     stop: int
-    cols: List[int]
+    cols: List[int] # col index of each char in current line.
 
 def calc_tab_width(current_column: int) -> int:
     return 4 - (current_column % 4)

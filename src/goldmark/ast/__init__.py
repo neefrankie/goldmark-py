@@ -36,4 +36,6 @@ from .inline import (
     AutoLink,
     AutoLinkKind,
     RawHTML,
+    merge_or_append_text_segment,
+    merge_or_replace_text_segment,
 )

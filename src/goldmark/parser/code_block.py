@@ -1,5 +1,3 @@
-from typing import Tuple
-
 from goldmark.ast import (
     Node
 )
@@ -10,14 +8,11 @@ from goldmark.ast import (
     CodeBlock,
 )
 
-from .context import (
-    ParseContext,
-    State,
-)
-
-from .parser import (
+from .base import (
     BlockParser,
     OpenResult,
+    State,
+    Context,
 )
 
 class CodeBlockParser(BlockParser):
@@ -25,17 +20,18 @@ class CodeBlockParser(BlockParser):
     def trigger(self) -> str:
         return ''
 
-    def open(self, parent: Node, reader: Reader, pc: ParseContext) -> OpenResult | None:
-        line = reader.rest_line
-        if line is None:
-            return None
+    def open(self, parent: Node, reader: Reader, pc: Context) -> OpenResult | None:
+        seg = reader.peek_rest_line()
 
-        new_pos = reader.indent_cols(line.start, 4)
-        if new_pos == line.start or reader.is_blank_span(line.start, line.stop):
+        indent = reader.indent_width(seg.start, seg.stop)
+
+        pos = seg.start + indent.chars
+
+        if reader.is_ahead_blank(pos):
             return None
 
         node = CodeBlock()
-        reader.advance_to_pos(new_pos)
+        reader.advance_to_pos(pos)
 
         segment = reader.peek_rest_line(force_newline=True)
         if segment is None:
@@ -45,17 +41,16 @@ class CodeBlockParser(BlockParser):
         reader.advance_to_eol()
         return OpenResult(node, State.NO_CHILDREN)
 
-    def try_continue(self, node: Node, reader: Reader, pc: ParseContext) -> State:
-        line = reader.peek_rest_line()
-        if line is None:
-            return State.CLOSE
+    def try_continue(self, node: Node, reader: Reader, pc: Context) -> State:
+        seg = reader.peek_rest_line()
 
-        if reader.is_blank(line):
-            node.get_lines().append(reader.ltrim_space_tab(line, 4))
+        if reader.is_ahead_blank(seg.start):
+            node.get_lines().append(reader.ltrim_space_tab(seg, 4))
             return State.CONTINUE | State.NO_CHILDREN
 
-        new_pos = reader.indent_cols(line.start, 4)
-        if new_pos == line.start:
+        indent = reader.indent_width(seg.start, seg.stop)
+        new_pos = seg.start + indent.chars
+        if new_pos == seg.start:
             return State.CLOSE
 
         reader.advance_to_pos(new_pos)
@@ -68,18 +63,8 @@ class CodeBlockParser(BlockParser):
 
         return State.CONTINUE | State.NO_CHILDREN
 
-    def close(self, node: Node, reader: Reader, pc: ParseContext):
-        # Remove trailing blank lines
-        lines = node.get_lines()
-        last = len(lines) - 1
-        while last >= 0:
-            line = lines[last]
-            if reader.is_blank(line):
-                last -= 1
-            else:
-                break
-
-        lines.set_sliced(0, last+1)
+    def close(self, node: Node, reader: Reader, pc: Context):
+        pass
 
     def can_interrupt_paragraph(self) -> bool:
         return False

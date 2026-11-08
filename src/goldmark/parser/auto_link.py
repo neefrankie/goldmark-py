@@ -11,18 +11,16 @@ from goldmark.ast import (
     AutoLink,
 )
 
-from .context import (
-    ParseContext,
-)
-from .parser import (
+from .base import (
     InlineParser,
+    Context
 )
 
 class AutoLinkParser(InlineParser):
     def trigger(self) -> str:
         return '<'
     
-    def parse(self, parent: Node, reader: Reader, pc: ParseContext) -> Node | None:
+    def parse(self, parent: Node, reader: Reader, pc: Context) -> Node | None:
         line = reader.rest_line
         assert line is not None
         kind = AutoLinkKind.EMAIL

@@ -2,7 +2,11 @@ from .reader import (
     Reader,
 )
 from .line import (
-    LineSpan
+    ViewportPos,
+    ViewportRange,
+    LineContext,
+    Coordinate,
+    GapAmount,
 )
 from .segment import (
     Segment,

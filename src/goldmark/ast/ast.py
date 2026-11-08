@@ -38,6 +38,7 @@ class NodeKind(Enum):
     IMAGE = auto()
     AUTO_LINK = auto()
     RAW_HTML = auto()
+    DELIMITER = auto()
 
 @dataclass(slots=True)
 class Attribute:
@@ -58,7 +59,7 @@ class Node(ABC):
         pass
 
     @abstractmethod
-    def get_pos(self) -> int:
+    def get_pos(self) -> int | None:
         pass
 
     @abstractmethod
@@ -213,7 +214,7 @@ class BaseNode(Node, ABC):
     prev_sibling: Node | None = None
     child_count: int = 0
     attributes: Dict[str, str] = field(default_factory=dict)
-    pos: Pos = field(default_factory=Pos)
+    pos: int | None = None # start position of this node.
 
 
     @property
@@ -223,11 +224,11 @@ class BaseNode(Node, ABC):
     def count_children(self) -> int:
         return self.child_count
     
-    def get_pos(self) -> int:
-        return self.pos.pos
+    def get_pos(self) -> int | None:
+        return self.pos
 
     def set_pos(self, v: int):
-        return self.pos.set_pos(v)
+        self.pos = v
 
     def get_previous_sibling(self) -> Node | None:
         return self.prev_sibling
@@ -508,12 +509,15 @@ class Document(BaseBlock):
     def node_type(self) -> NodeType:
         return NodeType.DOCUMENT
 
-    def get_pos(self) -> int:
-        return 0
-
     @property
     def kind(self) -> NodeKind:
         return NodeKind.DOCUMENT
+
+    def dump(self, reader: Reader, level: int):
+        dump_node(self, reader, level)
+
+    def get_pos(self) -> int:
+        return 0
 
     def owner_document(self) -> Document | None:
         return self

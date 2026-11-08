@@ -1,5 +1,3 @@
-from typing import Tuple
-
 from goldmark.ast import (
     Node
 )
@@ -11,13 +9,11 @@ from goldmark.ast import (
     Heading,
 )
 
-from .context import (
-    ParseContext,
-    State,
-)
-from .parser import (
+from .base import (
     BlockParser,
-    OpenResult
+    OpenResult,
+    State,
+    Context
 )
 
 class ATXHeadingParser(BlockParser):
@@ -25,61 +21,70 @@ class ATXHeadingParser(BlockParser):
     def trigger(self) -> str:
         return '#'
 
-    def open(self, parent: Node, reader: Reader, pc: ParseContext) -> OpenResult | None:
-        line = reader.rest_line
-        if line is None:
-            return None
-        
-        pos = pc.block_offset
-        if pos < 0:
+    def open(self, parent: Node, reader: Reader, pc: Context) -> OpenResult | None:
+        seg = reader.peek_rest_line()
+
+        # TODO: this is repetition.
+        indent = reader.indent_width(seg.start, seg.stop)
+
+        pos = seg.start + indent.chars # first non-space char
+        # Reached EOL after indent, or indented columns larger than 3
+        if reader.is_eol(pos) or indent.cols > 3:
             return None
 
-        level = reader.count_char('#', line.start)
+        level = reader.count_char('#', pos)
         if level == 0 or level > 6:
             return None
 
-        # ###Hello
-        if not reader.is_whitespace(line.start + level):
+        pos += level # after last #, it should have a whitespace.
+        # '###Hello' is not valid. 
+        if not reader.is_whitespace(pos):
             return None
 
-        # ###\n
-        if reader.is_newline(line.start + level):
-            return OpenResult(Heading.new(level), State.NO_CHILDREN)
+        node = Heading.new(level)
+        
+        # There is no text like: ###\n
+        if reader.is_eol(pos):
+            reader.advance_to_eol()
+            return OpenResult(node, State.NO_CHILDREN)
         
         # Now it should be '### whatever'
-        text_start = line.start + level + 1 # After '### '
-        text_seg = reader.strip_space(Segment(text_start, line.stop)) # stripped leading '###[spaces]' and trailing whitespaces.
+        pos += 1 # after '### '
+        text_seg = reader.strip_space(pos, seg.stop) # stripped leading '###[spaces]' and trailing whitespaces.
         
         if len(text_seg) == 0:
             reader.advance_to_eol()
-            return OpenResult(Heading.new(level), State.NO_CHILDREN)
+            return OpenResult(node, State.NO_CHILDREN)
 
         # TODO: Goldmark parses attributes here.
         # Leave it for future implementation.
 
-        
-        right_level = reader.right_count_char('#', text_seg.stop-1)
+        right_level = reader.rstrip(text_seg.start, text_seg.stop, '#')
+        stop = text_seg.stop - right_level
         # The text part only has trailing '###',
         # which means the whole heading is written like '### ###'
-        if right_level == len(text_seg): 
+        if text_seg.start == stop:
             reader.advance_to_eol()
-            return OpenResult(Heading.new(level), State.NO_CHILDREN)
+            return OpenResult(node, State.NO_CHILDREN)
 
-        # The text part might be like 'hello    ###'
-        stop = text_seg.stop - right_level
+        # After striping trailing '#'s,
+        # The text part might be like 'hello    '
         if reader.is_whitespace(stop - 1):
-            text_seg = reader.rstrip_space(Segment(text_seg.start, stop))
+            right_space = reader.rstrip(text_seg.start, stop)
+            stop -= right_space
         
-        node = Heading.new(level)
-        node.get_lines().append(text_seg)
+        node.get_lines().append(Segment(
+            text_seg.start,
+            stop,
+        ))
         reader.advance_to_eol()
 
         return OpenResult(node, State.NO_CHILDREN)
 
-    def try_continue(self, node: Node, reader: Reader, pc: ParseContext) -> State:
+    def try_continue(self, node: Node, reader: Reader, pc: Context) -> State:
         return State.CLOSE
 
-    def close(self, node: Node, reader: Reader, pc: ParseContext):
+    def close(self, node: Node, reader: Reader, pc: Context):
         pass
 
     def can_interrupt_paragraph(self) -> bool:

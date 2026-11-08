@@ -12,31 +12,32 @@ from goldmark.ast import (
 
 from .context import (
     ParseContext,
-    State,
 )
 
-from .parser import (
+from .base import (
     BlockParser,
     OpenResult,
+    State,
+    Context
 )
 
-class BoockquoteParser(BlockParser):
+class BlockquoteParser(BlockParser):
     def trigger(self) -> str:
         return '>'
 
-    def open(self, parent: Node, reader: Reader, pc: ParseContext) -> OpenResult | None:
+    def open(self, parent: Node, reader: Reader, pc: Context) -> OpenResult | None:
         if self._process(reader):
             return OpenResult(Blockquote(), State.HAS_CHILDREN)
 
         return None
 
-    def try_continue(self, node: Node, reader: Reader, pc: ParseContext) -> State:
+    def try_continue(self, node: Node, reader: Reader, pc: Context) -> State:
         if self._process(reader):
             return State.CONTINUE | State.HAS_CHILDREN
 
         return State.CLOSE
 
-    def close(self, node: Node, reader: Reader, pc: ParseContext):
+    def close(self, node: Node, reader: Reader, pc: Context):
         pass
 
     def can_interrupt_paragraph(self) -> bool:
@@ -46,28 +47,31 @@ class BoockquoteParser(BlockParser):
         return False
 
     def _process(self, reader: Reader) -> bool:
-        line = reader.rest_line
-        if line is None:
+        seg = reader.peek_rest_line()
+
+        indent = reader.indent_width(seg.start, seg.stop)
+
+        if indent.cols < 3:
             return False
 
-        new_pos = reader.indent(line.start)
-
-        cols = new_pos - line.start
-
-        if cols > 3 or cols >= len(line) or not reader.is_right_angle(new_pos):
+        if indent.chars >= len(seg):
             return False
 
-        new_pos += 1 # eat '>'
+        pos = seg.start + indent.chars # >
+        if not reader.is_right_angle(pos):
+            return False
+
+        pos += 1 # after >
 
         # This line is simply '>' or '>\n'
-        if new_pos >= line.stop or reader.is_newline(new_pos):
-            reader.advance_to_pos(new_pos)
+        if pos >= seg.stop or reader.is_newline(pos):
+            reader.advance_to_pos(pos)
             return True
 
-        reader.advance_to_pos(new_pos) # after '>'
+        reader.advance_to_pos(pos) # after '>'
         # '> '
-        if reader.is_space_tab(new_pos):
-            reader.advance_to_pos(new_pos+1) # After '> '
+        if reader.is_space_tab(pos):
+            reader.advance_to_pos(pos+1) # After '> '
 
         return True
 

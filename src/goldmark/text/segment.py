@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
-from typing import Iterable, List, NamedTuple
+from typing import List, NamedTuple
 
 class Segment(NamedTuple):
     """A Segment holds information about source positions"""
-    start: int = -1 # index of a string section in the whole document
-    stop: int = -1 # index of the string's end position, exclusive.
+    start: int = 0 # index of a string section in the whole document
+    stop: int = 0 # index of the string's end position, exclusive.
     force_newline: bool = False
 
     def with_start(self, v: int) -> 'Segment':

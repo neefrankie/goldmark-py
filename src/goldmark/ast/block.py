@@ -8,8 +8,9 @@ from goldmark.text import (
 from .ast import (
     BaseBlock,
     dump_node,
-    NodeKind
+    NodeKind,
 )
+from .inline import Text
 
 
 @dataclass(slots=True)
@@ -92,7 +93,14 @@ class CodeBlock(BaseBlock):
 
 @dataclass(slots=True)
 class FencedCodeBlock(BaseBlock):
+    info: Text = Text()
     lang: str = ''
+
+    @classmethod
+    def new(cls, info: Text) -> 'FencedCodeBlock':
+        return cls(
+            info=info,
+        )
 
     @property
     def kind(self) -> NodeKind:
